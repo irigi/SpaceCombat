@@ -16,7 +16,7 @@ import pyximport; pyximport.install()
 spread = math.cos(15.0 / 180 * np.pi)
 targetSize = 100000
 startDst = 1.5e5
-dt = 0.1
+dt = 1
 tMax = 3600
 
 class SpaceObject(object):
@@ -26,31 +26,31 @@ class SpaceObject(object):
         self.vx = 0.0
         self.vy = 0.0
         
-        self.lastFx = 0.0
-        self.lastFy = 0.0
-        self.lastM = m
-        
         self.__m = m                # not to be reused in child classes
         
     def mass(self):
         return self.__m
+    
+    def propagate(self, Fx, Fy, dt):        
+        self.__propagate_Exact(Fx=Fx, Fy=Fy, dt=dt)
+    
+    def __propagate_Exact(self, Fx, Fy, dt):
+
+
+        x0 = self.x
+        vx0 = self.vx
+        y0 = self.y
+        vy0 = self.vy
+        m0 = self.mass()
         
-    def propagate_(self, Fx, Fy):
-        lm = self.lastM
-        m = self.mass()
         
-        self.x = self.x  + self.vx * dt + self.lastFx / lm * dt*dt/2
-        self.vx = self.vx  + (self.lastFx / lm + Fx / m)/2 * dt
+        self.x = x0 + vx0 * dt + Fx * dt*dt / (2 * m0)
+        self.vx = vx0 + Fx * dt / m0
+        
+        self.y = y0 + vy0 * dt + Fy * dt*dt / (2 * m0) 
+        self.vy = vy0 + Fy * dt / m0
 
-        self.y = self.y  + self.vy * dt + self.lastFy / lm * dt*dt/2
-        self.vy = self.vy  + (self.lastFy / lm + Fy / m)/2 * dt        
-
-        self.lastFx = Fx
-        self.lastFy = Fy        
-        self.lastM = m
-
-
-    def propagate(self, Fx, Fy):
+    def __propagate_Euler(self, Fx, Fy, dt):
         m = self.mass()
         
         self.x = self.x  + self.vx * dt
@@ -105,11 +105,43 @@ class Ship(SpaceObject):
         return 2 * self.pwrGW / ((self.vOut*eff)**2) * 1e9
     
     
-    def propagate(self, Fx, Fy, ctrl):
+    def propagate(self, Fx, Fy, dt, ctrl):
+        self.__propagate_Exact(Fx, Fy, dt, ctrl)
+        
+    def __propagate_Euler(self, Fx, Fy, dt, ctrl):
         #self.mFuel = max(0.0,self.mFuel - self.dm(ctrl)*dt/2)
-        SpaceObject.propagate(self, Fx, Fy)
+        SpaceObject.propagate(self, Fx=Fx, Fy=Fy, dt=dt)
         self.mFuel = max(0.0,self.mFuel - self.dm(ctrl)*dt)
         
+    def __propagate_Exact(self, Fx, Fy, dt, ctrl):
+        dm = self.dm(ctrl)
+        m = self.mass()
+        x0 = self.x
+        vx0 = self.vx
+        y0 = self.y
+        vy0 = self.vy
+        
+        tFuel = min(dt,self.mFuel / dm*dt)
+        tEmpty = dt - tFuel
+        
+        if tFuel > 1e-8:
+            self.mFuel = max(0.0,self.mFuel - dm*tFuel)
+            self.x = (dm*(Fx*tFuel + dm*(tFuel*vx0 + x0)) + 
+                  Fx*(m - dm*tFuel)*math.log((m - dm*tFuel)/m))/(dm**2)
+        
+            self.vx = (-(dm*Fx) + dm*(Fx + dm*vx0) 
+                  - dm*Fx*math.log((m - dm*tFuel)/m))/(dm**2)
+        
+            self.y = (dm*(Fy*tFuel + dm*(tFuel*vy0 + y0)) + 
+                  Fy*(m - dm*tFuel)*math.log((m - dm*tFuel)/m))/(dm**2)
+        
+            self.vy = (-(dm*Fy) + dm*(Fy + dm*vy0) 
+                  - dm*Fy*math.log((m - dm*tFuel)/m))/(dm**2)
+      
+        if tEmpty > 1e-8:
+            SpaceObject.propagate(self, Fx=0,Fy=0,dt=tEmpty)
+            
+
         
 class Battle(object):
     def __init__(self, shipA, shipB):
@@ -139,7 +171,7 @@ class Battle(object):
         FxA = c * FA
         FyA = s * FA
         
-        self.shipA.propagate(Fx=FxA,Fy=FyA, ctrl=ctrlA)
+        self.shipA.propagate(Fx=FxA, Fy=FyA, dt=dt, ctrl=ctrlA)
         
         if math.cos(ctrlA.phi) > spread:
             if random.random() < targetSize / dstSq:
@@ -156,7 +188,7 @@ class Battle(object):
         FxB = c * FB
         FyB = s * FB
         
-        self.shipB.propagate(Fx=FxB,Fy=FyB, ctrl=ctrlB)
+        self.shipB.propagate(Fx=FxB,Fy=FyB,dt=dt,ctrl=ctrlB)
         
         if math.cos(ctrlB.phi) > spread:
             if random.random() < targetSize / dstSq:
@@ -204,12 +236,6 @@ class DNN(object):
         v3 = self.sig(self.w3.dot(v2) - self.b3)
         v4 = self.sig(self.w4.dot(v3) - self.b4)
         
-        print (inVector)
-        print (v1)
-        print (v2)
-        print (v3)
-        print (v4)
-        
         return v4
     
     
@@ -256,7 +282,6 @@ class StrategyDNN(Strategy):
         if battle.shipA.strategy is self:
             myShip = battle.shipA
             opShip = battle.shipB
-            print('hit')
         else:
             myShip = battle.shipB
             opShip = battle.shipA
@@ -277,7 +302,7 @@ class StrategyDNN(Strategy):
       
 def printStats():
     b = Battle(shipA=Ship(strategy=StrategyFullThrust()), 
-               shipB=Ship(strategy=StrategyDNN())) 
+               shipB=Ship(strategy=StrategyDuck())) 
     tt = []
     xA = []
     yA = []
