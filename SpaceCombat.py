@@ -35,8 +35,6 @@ class SpaceObject(object):
         self.__propagate_Exact(Fx=Fx, Fy=Fy, dt=dt)
     
     def __propagate_Exact(self, Fx, Fy, dt):
-
-
         x0 = self.x
         vx0 = self.vx
         y0 = self.y
@@ -114,32 +112,36 @@ class Ship(SpaceObject):
         self.mFuel = max(0.0,self.mFuel - self.dm(ctrl)*dt)
         
     def __propagate_Exact(self, Fx, Fy, dt, ctrl):
-        dm = self.dm(ctrl)
-        m = self.mass()
-        x0 = self.x
-        vx0 = self.vx
-        y0 = self.y
-        vy0 = self.vy
+        if self.mFuel <= 0.0:
+            SpaceObject.propagate(self, Fx=0,Fy=0,dt=dt)
+            
+        else:
+            dm = self.dm(ctrl)
+            m = self.mass()
+            x0 = self.x
+            vx0 = self.vx
+            y0 = self.y
+            vy0 = self.vy
         
-        tFuel = min(dt,self.mFuel / dm*dt)
-        tEmpty = dt - tFuel
+            tFuel = min(dt,self.mFuel / dm*dt)
+            tEmpty = dt - tFuel
         
-        if tFuel > 1e-8:
-            self.mFuel = max(0.0,self.mFuel - dm*tFuel)
-            self.x = (dm*(Fx*tFuel + dm*(tFuel*vx0 + x0)) + 
+            if tFuel > 1e-8:
+                self.mFuel = max(0.0,self.mFuel - dm*tFuel)
+                self.x = (dm*(Fx*tFuel + dm*(tFuel*vx0 + x0)) + 
                   Fx*(m - dm*tFuel)*math.log((m - dm*tFuel)/m))/(dm**2)
         
-            self.vx = (-(dm*Fx) + dm*(Fx + dm*vx0) 
+                self.vx = (-(dm*Fx) + dm*(Fx + dm*vx0) 
                   - dm*Fx*math.log((m - dm*tFuel)/m))/(dm**2)
         
-            self.y = (dm*(Fy*tFuel + dm*(tFuel*vy0 + y0)) + 
+                self.y = (dm*(Fy*tFuel + dm*(tFuel*vy0 + y0)) + 
                   Fy*(m - dm*tFuel)*math.log((m - dm*tFuel)/m))/(dm**2)
         
-            self.vy = (-(dm*Fy) + dm*(Fy + dm*vy0) 
+                self.vy = (-(dm*Fy) + dm*(Fy + dm*vy0) 
                   - dm*Fy*math.log((m - dm*tFuel)/m))/(dm**2)
       
-        if tEmpty > 1e-8:
-            SpaceObject.propagate(self, Fx=0,Fy=0,dt=tEmpty)
+            if tEmpty > 1e-8:
+                SpaceObject.propagate(self, Fx=0,Fy=0,dt=tEmpty)
             
 
         
@@ -311,7 +313,7 @@ def printStats():
     hA = []
     hB = []
     t = 0
-    while t < 3600:       
+    while t < tMax:
         tt.append(t)
         xA.append(b.shipA.x)
         yA.append(b.shipA.y)
