@@ -212,11 +212,7 @@ class Battle(object):
         
         return 0
 
-           
-# neuron outputs: 
-#    - phi
-#    - thr
-#    - eff
+
 class DNN(object):
     def __init__(self):
         self.w1 = np.random.rand(7,7)
@@ -230,6 +226,9 @@ class DNN(object):
         self.b4 = np.random.rand(3,1)
         
     def sig(self, x):
+        x[x > 15] = 15
+        x[x < -15] = -15
+        
         return 1/(1+np.exp(-x))
         
     def decide(self, inVector):
@@ -288,22 +287,39 @@ class StrategyDNN(Strategy):
             myShip = battle.shipB
             opShip = battle.shipA
             
+        deltaX = np.array([opShip.x-myShip.x, opShip.y-myShip.y])
+        dist = np.linalg.norm(deltaX)
+        dirTowards = deltaX / np.linalg.norm(deltaX)
+        dirSideways = np.array([-dirTowards[1], dirTowards[0]])
+        
+        vel = np.array([opShip.vx-myShip.vx, opShip.vy-myShip.vy])
+        vTowards  = np.vdot(vel,dirTowards)
+        vSideways = np.vdot(vel,dirSideways)
         
         vecIn = np.transpose(np.matrix(
             [math.log(max(0.1,myShip.health)),
              math.log(max(0.1,opShip.health)),
              math.log(max(0.1,myShip.mFuel)),
              math.log(max(0.1,opShip.mFuel)),
-             math.log(max(0.1,(myShip.x-opShip.x)**2+(myShip.y-opShip.y)**2))/2,
-             math.log(2),
-             math.log(2)]))
+             math.log(max(0.1,dist)),
+             vTowards,
+             vSideways]))
     
-        self.ctrl.eff = 1.0
+        vecOut = self.dnn.decide(vecIn)
+
+        # neuron outputs: 
+        #    - phi
+        #    - thr
+        #    - eff        
+        self.ctrl.phi = vecOut[0]
+        self.ctrl.thr = vecOut[1]
+        self.ctrl.eff = vecOut[2]
+        
         return self.ctrl
     
       
 def printStats():
-    b = Battle(shipA=Ship(strategy=StrategyFullThrust()), 
+    b = Battle(shipA=Ship(strategy=StrategyDNN()), 
                shipB=Ship(strategy=StrategyDuck())) 
     tt = []
     xA = []
