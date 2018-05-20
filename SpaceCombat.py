@@ -5,19 +5,18 @@ Spyder Editor
 This is a temporary script file.
 """
 
-import copy
 import math
 import numpy as np
 import matplotlib.pyplot as plt
 import random
 import pyximport; pyximport.install()
-from Strategy import StrategyDNN, StrategyDuck
+from Strategy import StrategyDNN, StrategyDuck, StrategyFullThrust, StrategyFullDuck
 from Physics import Ship
 
 spread = math.cos(15.0 / 180 * np.pi)
-targetSize = 100000
+targetSize = 100000*100
 startDst = 1.5e5
-dt = 1
+dt = 5
 tMax = 3600
 healthMaxAttacker = 20
 healthMaxDefender = 15
@@ -25,12 +24,10 @@ healthMaxDefender = 15
 
         
 class Battle(object):
-    def __init__(self, shipA, shipB):
-        self.shipA = copy.deepcopy(shipA)
-        self.shipB = copy.deepcopy(shipB)
+    def __init__(self, strategyA, strategyB):
+        self.shipA = Ship(strategy=strategyA, healthMax=healthMaxAttacker)
+        self.shipB = Ship(strategy=strategyB, healthMax=healthMaxDefender)
         
-        self.shipA.healthMax = healthMaxAttacker
-        self.shipB.healthMax = healthMaxDefender
         self.reset_ships()
         
     def reset_ships(self):        
@@ -62,11 +59,6 @@ class Battle(object):
         
         self.shipA.propagate(Fx=FxA, Fy=FyA, dt=dt, ctrl=ctrlA)
         
-        if math.cos(ctrlA.phi) > spread:
-            if random.random() < targetSize / dstSq:
-                self.shipB.health = self.shipB.health - 1
-        
-        
         ctrlB = self.shipB.strategy.get_controls(battle=self)
 
         phi = phi + np.pi  #math.atan2(self.shipA.y-self.shipB.y, self.shipA.x-self.shipB.x)
@@ -77,11 +69,20 @@ class Battle(object):
         FxB = c * FB
         FyB = s * FB
         
-        self.shipB.propagate(Fx=FxB,Fy=FyB,dt=dt,ctrl=ctrlB)
+        self.shipB.propagate(Fx=FxB, Fy=FyB, dt=dt, ctrl=ctrlB)
+
+        hitProbability = min(1,targetSize / dstSq)
+        if math.cos(ctrlA.phi) > spread:
+            self.shipB.health = self.shipB.health - hitProbability # to reduce noise during learning 
+            
+            #if random.random() < hitProbability:
+            #    self.shipB.health = self.shipB.health - 1
         
         if math.cos(ctrlB.phi) > spread:
-            if random.random() < targetSize / dstSq:
-                self.shipA.health = self.shipA.health - 1        
+            self.shipA.health = self.shipA.health - hitProbability # to reduce noise during learning 
+            
+            #if random.random() < targetSize / dstSq:
+            #    self.shipA.health = self.shipA.health - 1        
         
     def score(self, sA, sB):
         '''
@@ -89,15 +90,15 @@ class Battle(object):
         1 = shipA victory, -1 = shipB victory
         '''
         
-        if self.sA.health <= 0.0:
-            if self.sB.health <= 0.0:
+        if sA.health <= 0.0:
+            if sB.health <= 0.0:
                 return 0
             else:
                 return -1
             
-        if self.sB.health <= 0.0:
+        if sB.health <= 0.0:
             return 1        
-        
+
         return sA.health/sA.healthMax - sB.health/sB.healthMax
         
     def play_battle(self):        
@@ -118,11 +119,36 @@ class Battle(object):
         return self.score(self.shipA, self.shipB)
 
 
+class BreedingPool(object):
+    def __init__(self):
+        self.NNN = 2
+        self.pool = []
+        for i in range(0,self.NNN):
+            if i == 0:
+                strategy = StrategyFullThrust()
+            else:
+                strategy = StrategyFullDuck()
+
+            strategy.bp_score = 0
+            self.pool.append(strategy)
+        
+    def play(self):
+        for rd in range(0,100):
+            for strat in self.pool:
+                #rnd = np.random.randint(self.NNN)
+                for strat2 in self.pool:
+                    result = Battle(strat, strat2).play_battle()
+                    strat.bp_score = strat.bp_score + result
+                    strat2.bp_score = strat2.bp_score - result
+                
+            print ([a.bp_score for a in self.pool])
+    
+    
     
       
 def printStats():
-    b = Battle(shipA=Ship(strategy=StrategyDNN()), 
-               shipB=Ship(strategy=StrategyDuck())) 
+    b = Battle(StrategyFullThrust(), 
+               StrategyDuck() )
     tt = []
     xA = []
     yA = []
@@ -150,9 +176,13 @@ def printStats():
     
     #print(len(tt), len(yA))
     
-    #plt.figure(2)
-    #plt.plot(tt,FA)
-    #plt.show()
+    plt.figure(2)
+    plt.plot(tt,hA)
+
+    
+    plt.figure(2)
+    plt.plot(tt,hB)
+    plt.show()
     
     #plt.figure(3)
     #plt.plot(tt,mA)
@@ -166,21 +196,7 @@ def printStats():
     
 if __name__ == "__main__":
     
-    #res = {}
-    #res[-1] = 0
-    #res[0] = 0
-    #res[1] = 0
-    #for i in range(0,30):
-    #    b = Battle(shipA=Ship(strategy=StrategyFullThrust(), healthMax = 12.0), 
-    #               shipB=Ship(strategy=StrategyFullThrust(), healthMax = 10.0)
-    #               )
-    #    result = b.play_battle()
-    #    
-    #    res[result] = res[result] + 1
-    #    
-    #print (res)
+    poolTmp = BreedingPool()
+    poolTmp.play()
     
-    #dn = DNN()
-    #dn.decide(np.transpose(np.matrix([1,1,1,1,1,1,1])))
-    
-    printStats()
+    #printStats()

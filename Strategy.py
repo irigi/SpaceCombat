@@ -64,6 +64,19 @@ class StrategyFullThrust(Strategy):
         return self.ctrl
     
     
+# Flee if defender, attack when attacker
+class StrategyFullDuck(Strategy):
+    def get_controls(self, battle):
+        self.ctrl.thr = 1.0
+        self.ctrl.eff = 0.03
+        if battle.shipA.strategy is self:
+            self.ctrl.phi = 0*np.pi
+        else:
+            self.ctrl.phi = np.pi
+        
+        return self.ctrl
+    
+    
 class StrategyDNN(Strategy):
     def __init__(self):
         Strategy.__init__(self)
