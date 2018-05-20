@@ -83,14 +83,14 @@ class Ship(SpaceObject):
             return 0.0
         
         eff = max(0.0,min(1.0,ctrl.eff))
-        return 2 * self.pwrGW / (self.vOut * eff) * 1e9
+        return 2 * self.pwrGW * ctrl.thr / (self.vOut * eff) * 1e9
     
     def dm(self, ctrl):        
         if self.mFuel <= 0:
             return 0.0
         
         eff = max(0.0,min(1.0,ctrl.eff))
-        return 2 * self.pwrGW / ((self.vOut*eff)**2) * 1e9
+        return 2 * self.pwrGW * ctrl.thr / ((self.vOut*eff)**2) * 1e9
     
     
     def propagate(self, Fx, Fy, dt, ctrl):
@@ -102,11 +102,12 @@ class Ship(SpaceObject):
         self.mFuel = max(0.0,self.mFuel - self.dm(ctrl)*dt)
         
     def __propagate_Exact(self, Fx, Fy, dt, ctrl):
-        if self.mFuel <= 0.0:
+        dm = self.dm(ctrl)
+        
+        if self.mFuel <= 0.0 or dm <= 0.0:
             SpaceObject.propagate(self, Fx=0,Fy=0,dt=dt)
             
         else:
-            dm = self.dm(ctrl)
             m = self.mass()
             x0 = self.x
             vx0 = self.vx
